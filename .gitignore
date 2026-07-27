@@ -1,11 +1,23 @@
+# Node
 node_modules/
+.next/
+out/
+
+# Environment
 .env
 .env.local
-__pycache__/
-*.pyc
-venv/
-hr_env/
-.next/
+.env.production
+
+# Python backend
+backend/__pycache__/
+backend/*.pyc
+backend/venv/
+backend/hr_env/
+
+# Build outputs
 *.pdf
 *.docx
 
+# OS
+.DS_Store
+Thumbs.db
