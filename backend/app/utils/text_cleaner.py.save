@@ -1,0 +1,23 @@
+mport re
+
+
+def clean_llm_output(text: str) -> str:
+    """Агрессивно удаляет thinking-блоки, иероглифы и азиатскую пунктуацию."""
+    if not text:
+        return ""
+    
+    # 1. Удаляем теги <think>...</think>
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = text.replace("<think>", "").replace("</think>", "")
+    
+    # 2. Жестко удаляем ВСЕ китайские/японские/корейские иероглифы
+    text = re.sub(r'[\u4e00-\u9fff]+', '', text)
+    
+    # 3. Удаляем азиатские знаки препинания
+    text = re.sub(r'[\u3000-\u303F\uFF00-\uFFEF]+', '', text)
+    
+    # 4. Чистим артефакты
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()

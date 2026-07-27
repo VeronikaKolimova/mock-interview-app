@@ -1,0 +1,17 @@
+mock-interview-app/
+├── backend/              # FastAPI
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── services/
+│   │   ├── llm.py
+│   │   ├── tts.py
+│   │   └── avatar.py
+│   └── models/
+│       └── schemas.py
+└── frontend/             # Next.js
+    ├── package.json
+    ├── app/
+    │   ├── page.tsx
+    │   └── interview/
+    │       └── page.tsx
+    └── components/
