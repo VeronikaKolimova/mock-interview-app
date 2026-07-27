@@ -2,13 +2,16 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';;
 import { useSearchParams } from 'next/navigation';
 
 interface Message {
   role: string;
   content: string;
   audioUrl?: string;
+    </Suspense>
+  );
 }
 
 export default function InterviewPage() {
@@ -193,6 +196,7 @@ export default function InterviewPage() {
 
   if (!isStarted) {
     return (
+    <Suspense fallback={<div className='p-10 text-center'>Загрузка параметров...</div>}>
       <div className="flex flex-col h-screen bg-gray-50 items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl text-center max-w-md w-full">
           <h1 className="text-3xl font-bold mb-4">
@@ -233,6 +237,7 @@ export default function InterviewPage() {
   }
 
   return (
+    <Suspense fallback={<div className='p-10 text-center'>Загрузка параметров...</div>}>
     <div className="flex flex-col h-screen bg-gray-50">
       <header className="bg-gray-800 text-white p-4 shadow-lg">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -276,6 +281,7 @@ export default function InterviewPage() {
                       }
 
                       return (
+    <Suspense fallback={<div className='p-10 text-center'>Загрузка параметров...</div>}>
                         <>
                           <div className="text-gray-600 mb-3 italic">{feedback}</div>
                           {question && (
@@ -398,5 +404,6 @@ export default function InterviewPage() {
       </div>
     </div>
   );
+    </Suspense>
+  );
 }
-
