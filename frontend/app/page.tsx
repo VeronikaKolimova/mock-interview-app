@@ -339,7 +339,7 @@ export default function InterviewPage() {
       }
     } as const;
     
-    html2pdf().set(opt).from(element).save();
+    html2pdf().set(opt as any).from(element).save();
   };
 
   const downloadWord = async (content: string, filename: string) => {
