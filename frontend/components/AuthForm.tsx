@@ -23,7 +23,7 @@ export default function AuthForm() {
           password 
         });
         if (error) throw error;
-        console.log('✅ Успешный вход:', data.user.email);
+        console.log('✅ Успешный вход:', data.user?.email);
       } else {
         // РЕГИСТРАЦИЯ + АВТОМАТИЧЕСКИЙ ВХОД
         const { data, error } = await supabase.auth.signUp({ 
@@ -31,7 +31,7 @@ export default function AuthForm() {
           password 
         });
         if (error) throw error;
-        console.log('✅ Регистрация успешна, автологин:', data.user.email);
+        console.log('✅ Регистрация успешна, автологин:', data.user?.email);
         // Supabase автоматически создаёт сессию после signUp
       }
     } catch (err: any) {
