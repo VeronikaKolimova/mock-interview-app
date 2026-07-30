@@ -23,7 +23,6 @@ jiter==0.16.0
 lxml==6.1.1
 multidict==6.7.1
 openai==1.51.2
-packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
 propcache==0.5.2
 pydantic==2.9.2
 pydantic-settings==2.5.2
