@@ -1,23 +1,23 @@
 import os
+from pathlib import Path
 from supabase import create_client, Client
+from dotenv import load_dotenv
 
-# Читаем переменные напрямую из окружения сервера
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_ANON_KEY")
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
-# --- ВРЕМЕННАЯ ОТЛАДКА ---
-print("=" * 50)
-print("DEBUG: Проверка переменных окружения на Render")
-print(f"SUPABASE_URL существует: {bool(url)}")
-print(f"SUPABASE_ANON_KEY существует: {bool(key)}")
-print("Все ключи в os.environ, содержащие 'SUPABASE':")
-print([k for k in os.environ.keys() if 'SUPABASE' in k])
-print("=" * 50)
+# 1. Получаем значения и убираем все пробелы по краям
+url = os.getenv("SUPABASE_URL", "").strip()
+key = (os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY") or "").strip()
+
+# 2. Жесткая проверка URL: оставляем только ASCII-символы (защита от русской 'с' вместо 'c')
+url = url.encode('ascii', 'ignore').decode('ascii')
 
 if not url or not key:
-    raise ValueError("Supabase URL и SUPABASE_ANON_KEY не найдены в переменных окружения!")
+    raise ValueError(f"Supabase URL или Key не найдены или пусты! Проверь файл: {env_path}")
 
-# Инициализируем клиент
+print(f"✅ База данных инициализирована. URL: {url[:20]}...")
+
 supabase: Client = create_client(url, key)
 
 def get_supabase_client() -> Client:
