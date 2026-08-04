@@ -1,40 +1,65 @@
-# Environment variables (Самое важное!)
-.env
-.env.local
-.env.production
-.env.*
-!.env.example
-
-# Python / Backend
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Dependencies
+node_modules/
 venv/
-hr_env/
-env/
-.venv
-pip-log.txt
-pip-delete-this-directory.txt
-*.egg-info/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Build artifacts
 dist/
 build/
-.pytest_cache/
+target/
+*.pyc
+*.class
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
 
-# Node.js / Frontend
-node_modules/
-.next/
-out/
-.vercel
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
 
-# OS & IDE
-.DS_Store
-Thumbs.db
-desktop.ini
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
 .vscode/
 .idea/
+*.DS_Store
+Thumbs.db
 
-# Misc
-*.pdf
-*.docx
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
