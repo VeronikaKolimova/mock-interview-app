@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Mock Interview API", version="1.0.0")
 
 # ==========================================
+# HEALTH CHECK ENDPOINT
+# ==========================================
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker and load balancers"""
+    return {"status": "healthy", "version": "1.0.0"}
+
+# ==========================================
 # 1. ФУНКЦИИ ОЧИСТКИ
 # ==========================================
 def sanitize_pii(text: str) -> str:
@@ -104,7 +112,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
     
     session.messages.append(Message(role="assistant", content=greeting))
     
-    # 🔥 НОВОЕ: Сохраняем приветствие интервьюера в БД
+    # Сохраняем приветствие интервьюера в БД
     try:
         supabase.table("messages").insert({
             "interview_id": session_id,
@@ -208,7 +216,7 @@ async def submit_answer(data: AnswerSubmit, user_token: str = Query("")) -> Inte
             
         return InterviewResponse(session_id=data.session_id, message=Message(role="assistant", content=combined_response), is_finished=True, final_feedback=clean_response)
     else:
-        # 🔥 НОВОЕ: Генерируем реакцию и вопрос отдельно
+        # Генерируем реакцию и вопрос отдельно
         vacancy_context = ""
         if session.vacancy_text:
             vacancy_context = f"\n\n=== ВАКАНСИЯ ===\n{session.vacancy_text[:1500]}\n=== КОНЕЦ ==="
@@ -302,7 +310,7 @@ async def adapt_resume(data: ResumeAdaptRequest, user_token: str = Query("")):
     except Exception as e: logger.error(f"Ошибка LLM: {e}")
 
     try:
-        # 🔥 UPSERT: если запись уже существует (например, была "Ошибка AI"), обновляем её
+        # UPSERT: если запись уже существует (например, была "Ошибка AI"), обновляем её
         # Сначала пытаемся удалить старую запись для этого interview_id
         supabase.table("adapted_resumes").delete().eq("interview_id", data.session_id).execute()
         
@@ -438,7 +446,7 @@ async def convert_to_pdf(background_tasks: BackgroundTasks, file: UploadFile = F
             logger.error(f"Файл {output_path} не найден. Содержимое папки: {os.listdir(temp_dir)}")
             raise HTTPException(status_code=500, detail="PDF не создан")
         
-        # 🔥 КРИТИЧНО: Добавляем удаление в фоновую задачу ПОСЛЕ отправки ответа клиенту
+        # Добавляем удаление в фоновую задачу ПОСЛЕ отправки ответа клиенту
         background_tasks.add_task(shutil.rmtree, temp_dir)
         logger.info("✅ Запланировано безопасное удаление временных файлов после отправки")
         
