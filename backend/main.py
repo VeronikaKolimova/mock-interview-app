@@ -8,6 +8,7 @@ from models.schemas import InterviewStart, AnswerSubmit, InterviewResponse, Mess
 from services.llm import ask_llm
 from services.tts import text_to_speech
 from services.database import get_supabase_client
+from services.rag_service import rag_service
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -208,13 +209,31 @@ async def submit_answer(data: AnswerSubmit, user_token: str = Query("")) -> Inte
             
         return InterviewResponse(session_id=data.session_id, message=Message(role="assistant", content=combined_response), is_finished=True, final_feedback=clean_response)
     else:
-        # 🔥 НОВОЕ: Генерируем реакцию и вопрос отдельно
+        # 🔥 НОВОЕ: Генерируем реакцию и вопрос отдельно с использованием RAG
         vacancy_context = ""
-        if session.vacancy_text:
+        rag_context = ""
+        
+        # Используем RAG для поиска релевантных требований из вакансии
+        if session.vacancy_text and len(session.vacancy_text) > 50:
             vacancy_context = f"\n\n=== ВАКАНСИЯ ===\n{session.vacancy_text[:1500]}\n=== КОНЕЦ ==="
+            
+            # Определяем роль из названия вакансии или используем "General"
+            role = _detect_role_from_vacancy(session.vacancy_text)
+            
+            # Получаем релевантный контекст через RAG
+            rag_context = rag_service.get_context_for_interview(
+                candidate_answer=data.answer,
+                vacancy_text=session.vacancy_text,
+                role=role,
+                max_context_length=800
+            )
         
         # 1. Генерируем ТОЛЬКО реакцию на последний ответ
-        reaction_prompt = f"Дай КРАТКУЮ реакцию (1-2 предложения) на последний ответ кандидата: '{data.answer}'{vacancy_context}"
+        context_for_reaction = f"{vacancy_context}"
+        if rag_context:
+            context_for_reaction += f"\n\n=== РЕЛЕВАНТНЫЕ ТРЕБОВАНИЯ (RAG) ===\n{rag_context}\n=== КОНЕЦ RAG ==="
+        
+        reaction_prompt = f"Дай КРАТКУЮ реакцию (1-2 предложения) на последний ответ кандидата: '{data.answer}'{context_for_reaction}"
         reaction_messages = [{"role": "system", "content": "Ты HR-менеджер Анна." if session.interviewer == "hr" else "Ты технический лид Дмитрий."}, {"role": "user", "content": reaction_prompt}]
         reaction = ask_llm(reaction_messages, max_tokens=150)
         reaction = clean_llm_output(reaction)
@@ -230,8 +249,9 @@ async def submit_answer(data: AnswerSubmit, user_token: str = Query("")) -> Inte
         except Exception as e:
             logger.error(f"Ошибка сохранения реакции: {e}")
         
-        # 2. Генерируем следующий вопрос
-        question_prompt = f"История диалога: {dialog_text}\n\nЗадай ОДИН следующий вопрос кандидату{vacancy_context}"
+        # 2. Генерируем следующий вопрос с учётом RAG-контекста
+        context_for_question = f"История диалога: {dialog_text}{context_for_reaction}"
+        question_prompt = f"{context_for_question}\n\nЗадай ОДИН следующий вопрос кандидату, основываясь на требованиях вакансии и ответе кандидата"
         question_messages = [{"role": "system", "content": "Ты HR-менеджер Анна." if session.interviewer == "hr" else "Ты технический лид Дмитрий."}, {"role": "user", "content": question_prompt}]
         question = ask_llm(question_messages, max_tokens=300)
         question = clean_llm_output(question)
@@ -253,6 +273,26 @@ async def submit_answer(data: AnswerSubmit, user_token: str = Query("")) -> Inte
         session.question_idx += 1
         
         return InterviewResponse(session_id=data.session_id, message=Message(role="assistant", content=combined_response), is_finished=False)
+
+
+def _detect_role_from_vacancy(vacancy_text: str) -> str:
+    """Определяет роль (Data Scientist, ML Engineer, Data Analyst) по тексту вакансии"""
+    text_lower = vacancy_text.lower()
+    
+    if "ml engineer" in text_lower or "machine learning engineer" in text_lower or "mlops" in text_lower:
+        return "ML Engineer"
+    elif "data scientist" in text_lower or "ds" in text_lower:
+        return "Data Scientist"
+    elif "data analyst" in text_lower or "аналитик данных" in text_lower:
+        return "Data Analyst"
+    else:
+        # Пытаемся определить по ключевым словам
+        if "pytorch" in text_lower or "tensorflow" in text_lower or "deep learning" in text_lower:
+            return "ML Engineer"
+        elif "sql" in text_lower and "tableau" in text_lower or "powerbi" in text_lower:
+            return "Data Analyst"
+        else:
+            return "Data Scientist"  # По умолчанию
 
 @app.post("/api/adapt-resume")
 async def adapt_resume(data: ResumeAdaptRequest, user_token: str = Query("")):

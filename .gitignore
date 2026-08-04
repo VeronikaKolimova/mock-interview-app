@@ -1,40 +1,68 @@
-# Environment variables (Самое важное!)
-.env
-.env.local
-.env.production
-.env.*
-!.env.example
-
-# Python / Backend
+```
+# Dependencies
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
-venv/
-hr_env/
 env/
-.venv
+venv/
+.venv/
 pip-log.txt
 pip-delete-this-directory.txt
-*.egg-info/
-dist/
-build/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.pot
+*.po
+*~
 .pytest_cache/
+.mypy_cache/
+.hypothesis/
 
-# Node.js / Frontend
-node_modules/
-.next/
-out/
-.vercel
+# Environment
+.env
+.env.local
+.env.dev
+.env.prod
+.env.backup
+*.env*
+!.env.example
 
-# OS & IDE
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
-desktop.ini
+Icon?
+.directory
+.folders~
+metadata.json
+
+# Editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Misc
-*.pdf
-*.docx
+# Build and distribution artifacts
+dist/
+build/
+*.egg-info/
+.eggs/
+.installed.cfg
+lib/
+lib64/
+parts/
+sdist/
+develop-eggs/
+```
