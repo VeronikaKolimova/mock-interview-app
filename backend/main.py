@@ -21,6 +21,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Mock Interview API", version="1.1.0")
 
+class ResumeAdaptRequest(BaseModel):
+    session_id: str
+    resume_text: Optional[str] = None
+
 # ==========================================
 # HEALTH CHECK
 # ==========================================
