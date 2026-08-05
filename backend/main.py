@@ -16,14 +16,14 @@ import logging
 import re
 from services.file_parser import extract_text_from_file
 
+# ==========================================
+# ИНИЦИАЛИЗАЦИЯ
+# ==========================================
 supabase = get_supabase_client()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 app = FastAPI(title="Mock Interview API", version="1.1.0")
 
-class ResumeAdaptRequest(BaseModel):
-    session_id: str
-    resume_text: Optional[str] = None
 
 # ==========================================
 # HEALTH CHECK
@@ -201,7 +201,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
             "id": session_id,
             "user_token": user_token,
             "interviewer_type": data.interviewer,
-            "company_name": company_name,  # 👈 НОВОЕ
+            "company_name": company_name,
             "status": "in_progress",
             "final_feedback": None
         }).execute()
@@ -213,7 +213,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
         session_id=session_id,
         interviewer=data.interviewer,
         vacancy_text=data.vacancy_text,
-        company=data.company,  # 👈 НОВОЕ
+        company=data.company,
         created_at=datetime.now().isoformat(),
         question_idx=1,
         messages=[]
