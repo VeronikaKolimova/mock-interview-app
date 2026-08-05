@@ -397,40 +397,83 @@ export default function InterviewPage() {
     }
   };
 
-  const startInterview = async () => {
-    if (!userToken) return;
+  const checkBackendHealth = async () => {
+    try {
+        const response = await fetch(`${API_URL}/health`, { 
+            method: 'GET',
+            signal: AbortSignal.timeout(5000) // 5 секунд таймаут
+        });
+        return response.ok;
+    } catch {
+        return false;
+    }
+  };
+
+  const startInterview = async (retryCount = 0) => {
+    const MAX_RETRIES = 2;
     
-    // 👇 ВАЛИДАЦИЯ КОМПАНИИ
+    // Валидация
+    if (!userToken) {
+      alert("⚠️ Вы не авторизованы!");
+      return;
+    }
+    
     if (!selectedCompany) {
       alert("⚠️ Пожалуйста, выберите компанию для собеседования!");
       return;
     }
     
+    // Health check только при первой попытке
+    if (retryCount === 0) {
+      setIsLoading(true);
+      const isHealthy = await checkBackendHealth();
+      setIsLoading(false);
+      
+      if (!isHealthy) {
+        alert("⚠️ Сервер недоступен. Проверьте интернет-соединение и попробуйте снова.");
+        return;
+      }
+    }
+    
     setIsLoading(true);
     setIsFinished(false);
+    
     try {
-      const response = await fetch(`${API_URL}/api/interview/start?user_token=${userToken}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          interviewer: interviewerType,
-          company: selectedCompany, // 👈 ПЕРЕДАЁМ КОМПАНИЮ
-          vacancy_text: vacancyText.trim() || undefined,
-          tts_enabled: true,
-        }),
-      });
-      if (!response.ok) throw new Error("Ошибка запуска");
-      const data = await response.json();
-      setSessionId(data.session_id);
-      setMessages([{ role: "assistant", content: data.message.content, audioUrl: data.audio_url }]);
-      if (data.audio_url) playAudio(data.audio_url);
+        const response = await fetch(`${API_URL}/api/interview/start?user_token=${userToken}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                interviewer: interviewerType,
+                company: selectedCompany,
+                vacancy_text: vacancyText.trim() || undefined,
+                tts_enabled: true,
+            }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setSessionId(data.session_id);
+        setMessages([{ role: "assistant", content: data.message.content, audioUrl: data.audio_url }]);
+        if (data.audio_url) playAudio(data.audio_url);
+        
     } catch (error) {
-      alert("Не удалось начать интервью. Проверьте бэкенд.");
+        console.error(`Попытка ${retryCount + 1}/${MAX_RETRIES + 1} не удалась:`, error);
+        
+        if (retryCount < MAX_RETRIES) {
+            // Ждём 1-2 секунды перед повтором
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+            return startInterview(retryCount + 1);
+        }
+        
+        alert(`Не удалось начать интервью после ${MAX_RETRIES + 1} попыток.\n\nПроверьте интернет-соединение и попробуйте снова.`);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
-
+  
   const sendMessage = async () => {
     if (!input.trim() || !sessionId || isFinished || !userToken) return;
     const userMessage = input.trim();
