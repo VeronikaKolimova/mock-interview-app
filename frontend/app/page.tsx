@@ -239,6 +239,7 @@ type Message = {
 type HistoryItem = {
   interview_id: string;
   interviewer_type: string;
+  company_name: string | null;
   status: string;
   final_feedback: string;
   created_at: string;
@@ -652,6 +653,12 @@ export default function InterviewPage() {
                       <h3 className="font-bold text-lg text-gray-800">
                         {item.interviewer_type === "hr" ? "👩 HR-менеджер" : "👨‍💻 Техлид"}
                       </h3>
+                      {/* 👇 НОВЫЙ БЕЙДЖ КОМПАНИИ */}
+                      {item.company_name && (
+                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          🏢 {item.company_name}
+                        </span>
+                      )}
                       <p className="text-sm text-gray-500">{new Date(item.created_at).toLocaleString("ru-RU")}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${item.status === "finished" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}>
