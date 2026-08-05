@@ -34,7 +34,12 @@ class InterviewStart(BaseModel):
     interviewer: str = Field(..., description="Тип интервьюера: 'hr' или 'techlead'")
     vacancy_text: Optional[str] = Field(None, description="Текст вакансии (если загружен)")
     tts_enabled: bool = Field(False, description="Нужна ли озвучка")
+    company_name: str = Field(..., description="Название компании, куда кандидат проходит собеседование")
+    user_token: Optional[str] = None # Токен может приходить в query params или теле
 
+class InterviewMessage(BaseModel):
+    interview_id: str
+    text: str
 
 class AnswerSubmit(BaseModel):
     """Ответ кандидата на вопрос интервьюера."""
