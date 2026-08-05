@@ -4,7 +4,7 @@ import shutil
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from models.schemas import InterviewStart, AnswerSubmit, InterviewResponse, Message, SessionData, ResumeAdaptRequest
+from models.schemas import InterviewStart, AnswerSubmit, InterviewResponse, Message, SessionData
 from services.llm import ask_llm
 from services.tts import text_to_speech
 from services.database import get_supabase_client
@@ -15,23 +15,25 @@ import tempfile
 import logging
 import re
 from services.file_parser import extract_text_from_file
+from pydantic import BaseModel
+from typing import Optional  # 👈 ВАЖНО! Этот импорт решает ошибку NameError
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ
 # ==========================================
 supabase = get_supabase_client()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-app = FastAPI(title="Mock Interview API", version="1.1.0")
+logger = logging.getLogger(__name__)  # ✅ ИСПРАВЛЕНО: было name
+app = FastAPI(title="Mock Interview API", version="1.0.0")
 
 
 # ==========================================
-# HEALTH CHECK
+# HEALTH CHECK ENDPOINT
 # ==========================================
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Docker and load balancers"""
-    return {"status": "healthy", "version": "1.1.0"}
+    return {"status": "healthy", "version": "1.0.0"}
 
 
 # ==========================================
@@ -136,7 +138,7 @@ def build_company_context(company_id: Optional[str]) -> str:
 def sanitize_pii(text: str) -> str:
     if not text:
         return text
-    # 1. Удаляем email и телефоны
+    # 1. Удаляем email и телефоны (это 100% ПДн)
     text = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL]', text, flags=re.IGNORECASE)
     text = re.sub(r'(\+7|8)[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}', '[ТЕЛЕФОН]', text)
     # 2. Удаляем ссылки и Telegram
@@ -146,10 +148,11 @@ def sanitize_pii(text: str) -> str:
     lines = text.split('\n')
     if lines:
         first_line = lines[0].strip()
+        # Проверяем, выглядит ли первая строка как "Фамилия Имя" (2-3 слова с большой буквы)
         if re.match(r'^[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+(\s+[А-ЯЁ][а-яё]+)?$', first_line):
             lines[0] = '[ИМЯ ФАМИЛИЯ]'
     text = '\n'.join(lines)
-    # 4. Убираем возраст и пол
+    # 4. Убираем возраст и пол (явные маркеры)
     text = re.sub(r'(Дата рождения|Возраст|Год рождения)[:\s]*.*?(?=\n|$)', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\b(Женщина|Мужчина)\b', '', text)
     return text.strip()
@@ -162,6 +165,7 @@ def clean_llm_output(text: str) -> str:
     text = text.replace("<think>", "").replace("</think>", "")
     text = re.sub(r'[\u4e00-\u9fff]+', '', text)
     text = re.sub(r'[\u3000-\u303F\uFF00-\uFFEF]+', '', text)
+    # ИСПРАВЛЕНО: Сохраняем переносы строк, убираем только лишние пробелы внутри строк
     lines = text.split('\n')
     cleaned_lines = [re.sub(r' {2,}', ' ', line.strip()) for line in lines if line.strip() or True]
     text = '\n'.join(cleaned_lines)
@@ -171,16 +175,14 @@ def clean_llm_output(text: str) -> str:
 # ==========================================
 # 2. НАСТРОЙКИ
 # ==========================================
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 sessions: dict[str, SessionData] = {}
 resumes: dict[str, str] = {}
+
+
+class ResumeAdaptRequest(BaseModel):
+    session_id: str
+    resume_text: Optional[str] = None
 
 
 # ==========================================
@@ -226,7 +228,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
     interviewer_name = "Анна" if data.interviewer == "hr" else "Дмитрий"
     interviewer_role = "HR-менеджер" if data.interviewer == "hr" else "технический лид"
     
-    # Формируем приветствие
+    # 🔥 НОВОЕ: Генерируем приветствие с учётом вакансии (СТРОГИЙ ЗАПРЕТ на упоминание резюме)
     if data.vacancy_text:
         vacancy_context = f"\n\n=== ТЕКСТ ВАКАНСИИ ===\n{data.vacancy_text[:1500]}\n=== КОНЕЦ ВАКАНСИИ ==="
         company_mention = f" из компании {company_name}" if company_name else ""
@@ -240,6 +242,17 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 Опирайся ТОЛЬКО на текст вакансии ниже.
 
 {vacancy_context}"""
+        greeting_messages = [
+            {"role": "system", "content": f"Ты {interviewer_role} {interviewer_name}{f' из компании {company_name}' if company_name else ''}."},
+            {"role": "user", "content": greeting_prompt}
+        ]
+        greeting = ask_llm(greeting_messages, max_tokens=200)
+        greeting = clean_llm_output(greeting)
+        company_suffix = f", {company_name}" if company_name else ""
+        if data.interviewer == "hr":
+            greeting = f"Анна (HR{company_suffix}): {greeting}"
+        else:
+            greeting = f"Дмитрий (Техлид{company_suffix}): {greeting}"
     else:
         company_mention = f" из компании {company_name}" if company_name else ""
         greeting_prompt = f"""{company_context}
@@ -248,21 +261,17 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 Задай первый открытый вопрос о кандидате.
 
 ❗️ ВАЖНО: Не упоминай резюме кандидата."""
-    
-    greeting_messages = [
-        {"role": "system", "content": f"Ты {interviewer_role} {interviewer_name}{f' из компании {company_name}' if company_name else ''}. Отвечай на русском языке."},
-        {"role": "user", "content": greeting_prompt}
-    ]
-    
-    greeting = ask_llm(greeting_messages, max_tokens=200)
-    greeting = clean_llm_output(greeting)
-    
-    # Добавляем префикс имени
-    company_suffix = f", {company_name}" if company_name else ""
-    if data.interviewer == "hr":
-        greeting = f"Анна (HR{company_suffix}): {greeting}"
-    else:
-        greeting = f"Дмитрий (Техлид{company_suffix}): {greeting}"
+        greeting_messages = [
+            {"role": "system", "content": f"Ты {interviewer_role} {interviewer_name}{f' из компании {company_name}' if company_name else ''}."},
+            {"role": "user", "content": greeting_prompt}
+        ]
+        greeting = ask_llm(greeting_messages, max_tokens=200)
+        greeting = clean_llm_output(greeting)
+        company_suffix = f", {company_name}" if company_name else ""
+        if data.interviewer == "hr":
+            greeting = f"Анна (HR{company_suffix}): {greeting}"
+        else:
+            greeting = f"Дмитрий (Техлид{company_suffix}): {greeting}"
     
     session.messages.append(Message(role="assistant", content=greeting))
     
@@ -277,7 +286,6 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
     except Exception as e:
         logger.error(f"Ошибка сохранения приветствия: {e}")
     
-    # TTS
     audio_url = None
     if data.tts_enabled:
         try:
@@ -561,8 +569,10 @@ async def adapt_resume(data: ResumeAdaptRequest, user_token: str = Query("")):
         logger.error(f"Ошибка LLM: {e}")
     
     try:
-        # UPSERT: если запись уже существует, обновляем её
+        # UPSERT: если запись уже существует (например, была "Ошибка AI"), обновляем её
+        # Сначала пытаемся удалить старую запись для этого interview_id
         supabase.table("adapted_resumes").delete().eq("interview_id", data.session_id).execute()
+        # Затем создаём новую запись с успешным результатом
         supabase.table("adapted_resumes").insert({
             "interview_id": data.session_id,
             "user_token": user_token,
@@ -605,6 +615,7 @@ async def get_interview_messages(interview_id: str):
     """Получить полную историю сообщений конкретного интервью из БД."""
     logger.info(f"🔍 Запрос сообщений для интервью: {interview_id}")
     try:
+        # Используем select("*") и явную сортировку для надежности
         response = supabase.table("messages").select("*").eq("interview_id", interview_id).order("created_at", desc=False).execute()
         logger.info(f"✅ Найдено сообщений: {len(response.data) if response.data else 0}")
         return {"messages": response.data or []}
@@ -630,7 +641,7 @@ async def delete_interview(interview_id: str, user_token: str = Query("")):
         if not interview.data:
             raise HTTPException(status_code=404, detail="Интервью не найдено или не принадлежит вам")
         
-        # 2. Удаляем связанные данные
+        # 2. Удаляем связанные данные (по отдельности, чтобы сбой одной таблицы не ломал всё)
         try:
             logger.info("Удаляем сообщения...")
             supabase.table("messages").delete().eq("interview_id", interview_id).execute()
@@ -643,7 +654,7 @@ async def delete_interview(interview_id: str, user_token: str = Query("")):
         except Exception as e:
             logger.warning(f"Адаптированное резюме не удалено (возможно, его нет): {e}")
         
-        # 3. Удаляем само интервью
+        # 3. Удаляем само интервью (это главное)
         logger.info("Удаляем интервью...")
         supabase.table("interviews").delete().eq("id", interview_id).execute()
         
@@ -662,14 +673,17 @@ async def convert_to_pdf(background_tasks: BackgroundTasks, file: UploadFile = F
     if not file.filename.endswith('.docx'):
         raise HTTPException(status_code=400, detail="Поддерживается только формат .docx")
     
+    # Создаём временную директорию
     temp_dir = tempfile.mkdtemp()
     input_path = os.path.join(temp_dir, "resume.docx")
     output_path = os.path.join(temp_dir, "resume.pdf")
     
     try:
+        # Сохраняем загруженный файл
         with open(input_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
         
+        # Конвертируем через LibreOffice headless
         result = subprocess.run(
             ['libreoffice', '--headless', '--invisible', '--convert-to', 'pdf', '--outdir', temp_dir, input_path],
             capture_output=True,
@@ -686,6 +700,7 @@ async def convert_to_pdf(background_tasks: BackgroundTasks, file: UploadFile = F
             logger.error(f"Файл {output_path} не найден. Содержимое папки: {os.listdir(temp_dir)}")
             raise HTTPException(status_code=500, detail="PDF не создан")
         
+        # Добавляем удаление в фоновую задачу ПОСЛЕ отправки ответа клиенту
         background_tasks.add_task(shutil.rmtree, temp_dir)
         logger.info("✅ Запланировано безопасное удаление временных файлов после отправки")
         
@@ -696,6 +711,7 @@ async def convert_to_pdf(background_tasks: BackgroundTasks, file: UploadFile = F
             headers={"Content-Disposition": "attachment; filename=resume.pdf"}
         )
     except Exception as e:
+        # В случае любой ошибки тоже чистим за собой
         try:
             shutil.rmtree(temp_dir)
         except:
