@@ -10,23 +10,14 @@ class Message(BaseModel):
 
 class SessionData(BaseModel):
     """Полное состояние сессии интервью (хранится в памяти сервера)."""
-    session_id: str
-    interviewer: str  # "hr" или "techlead"
-    vacancy_text: Optional[str] = None
-    created_at: str
-    question_idx: int = 1
-    current_stage: int = 1  # 🆕 1: Опыт, 2: Вакансия, 3: Софт-скиллы, 4: Карьера
-    messages: List[Message] = Field(default_factory=list)
-    
-class SessionData(BaseModel):
-    """Полное состояние сессии интервью."""
-    session_id: str
-    interviewer: str  # "hr" или "techlead"
-    vacancy_text: Optional[str] = None
-    created_at: str
-    question_idx: int = 1
-    current_stage: int = 1  # 🆕 1: Опыт, 2: Вакансия, 3: Софт-скиллы, 4: Карьера
-    messages: List[Message] = Field(default_factory=list)
+    session_id: str = Field(..., description="Уникальный ID сессии")
+    interviewer: str = Field(..., description="Тип интервьюера: 'hr' или 'techlead'")
+    vacancy_text: Optional[str] = Field(None, description="Текст вакансии")
+    company: Optional[str] = Field(None, description="🆕 ID компании, в которую проходит собеседование")
+    created_at: str = Field(..., description="Время создания сессии (ISO формат)")
+    question_idx: int = Field(1, description="Номер текущего вопроса")
+    current_stage: int = Field(1, description="🆕 Этап: 1-Опыт, 2-Вакансия, 3-Софт-скиллы, 4-Карьера")
+    messages: List[Message] = Field(default_factory=list, description="История сообщений")
 
 
 class InterviewStart(BaseModel):
@@ -34,24 +25,30 @@ class InterviewStart(BaseModel):
     interviewer: str = Field(..., description="Тип интервьюера: 'hr' или 'techlead'")
     vacancy_text: Optional[str] = Field(None, description="Текст вакансии (если загружен)")
     tts_enabled: bool = Field(False, description="Нужна ли озвучка")
-    company_name: str = Field(..., description="Название компании, куда кандидат проходит собеседование")
-    user_token: Optional[str] = None # Токен может приходить в query params или теле
+    company: Optional[str] = Field(
+        None, 
+        description="🆕 ID компании ('google', 'meta', 'yandex', ...). Если None — стандартный режим"
+    )
+    user_token: Optional[str] = Field(None, description="Токен пользователя (может приходить в query params или теле)")
+
 
 class InterviewMessage(BaseModel):
-    interview_id: str
-    text: str
+    """Сообщение в рамках интервью (для истории)."""
+    interview_id: str = Field(..., description="ID интервью")
+    text: str = Field(..., description="Текст сообщения")
+
 
 class AnswerSubmit(BaseModel):
     """Ответ кандидата на вопрос интервьюера."""
-    session_id: str
-    answer: str
+    session_id: str = Field(..., description="ID активной сессии")
+    answer: str = Field(..., description="Текст ответа кандидата")
     tts_enabled: bool = Field(False, description="Нужна ли озвучка ответа")
 
 
 class InterviewResponse(BaseModel):
     """Ответ сервера после обработки действия."""
-    session_id: str
-    message: Message
-    audio_url: Optional[str] = None
-    is_finished: bool = False
-    final_feedback: Optional[str] = None
+    session_id: str = Field(..., description="ID сессии")
+    message: Message = Field(..., description="Сообщение от интервьюера")
+    audio_url: Optional[str] = Field(None, description="URL аудио (если TTS включён)")
+    is_finished: bool = Field(False, description="Завершено ли интервью")
+    final_feedback: Optional[str] = Field(None, description="Итоговый фидбек (если завершено)")
