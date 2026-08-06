@@ -412,25 +412,17 @@ export default function InterviewPage() {
   const startInterview = async (retryCount = 0) => {
     const MAX_RETRIES = 2;
     
-    // Валидация
     if (!userToken) {
       alert("⚠️ Вы не авторизованы!");
       return;
     }
     
-    if (!selectedCompany) {
-      alert("⚠️ Пожалуйста, выберите компанию для собеседования!");
-      return;
-    }
-    
-    // Health check только при первой попытке
     if (retryCount === 0) {
       setIsLoading(true);
       const isHealthy = await checkBackendHealth();
       setIsLoading(false);
-      
       if (!isHealthy) {
-        alert("⚠️ Сервер недоступен. Проверьте интернет-соединение и попробуйте снова.");
+        alert("⚠️ Сервер недоступен.");
         return;
       }
     }
@@ -439,41 +431,62 @@ export default function InterviewPage() {
     setIsFinished(false);
     
     try {
-        const response = await fetch(`${API_URL}/api/interview/start?user_token=${userToken}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                interviewer: interviewerType,
-                company: selectedCompany,
-                vacancy_text: vacancyText.trim() || undefined,
-                tts_enabled: true,
-            }),
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        setSessionId(data.session_id);
-        setMessages([{ role: "assistant", content: data.message.content, audioUrl: data.audio_url }]);
-        if (data.audio_url) playAudio(data.audio_url);
-        
+      const body = {
+        interviewer: interviewerType,
+        company: selectedCompany || null,           // компания (опционально)
+        vacancy_text: vacancyText.trim() || null,   // вакансия (опционально)
+        resume_text: resumeText.trim() || null,     // 👈 НОВОЕ: резюме (опционально)
+        tts_enabled: true,
+      };
+      
+      // Логируем режим для отладки
+      console.log("🎯 Режим интервью:", {
+        company: body.company ? "✅" : "❌",
+        vacancy: body.vacancy_text ? "✅" : "❌",
+        resume: body.resume_text ? "✅" : "❌",
+      });
+      
+      const response = await fetch(`${API_URL}/api/interview/start?user_token=${userToken}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.session_id || !data.message) {
+        throw new Error("Неверный формат ответа");
+      }
+      
+      setSessionId(data.session_id);
+      setMessages([{
+        role: "assistant",
+        content: data.message.content,
+        audioUrl: data.audio_url
+      }]);
+      
+      if (data.audio_url) playAudio(data.audio_url);
+      
     } catch (error) {
-        console.error(`Попытка ${retryCount + 1}/${MAX_RETRIES + 1} не удалась:`, error);
-        
-        if (retryCount < MAX_RETRIES) {
-            // Ждём 1-2 секунды перед повтором
-            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-            return startInterview(retryCount + 1);
-        }
-        
-        alert(`Не удалось начать интервью после ${MAX_RETRIES + 1} попыток.\n\nПроверьте интернет-соединение и попробуйте снова.`);
-    } finally {
+      console.error(`Попытка ${retryCount + 1} не удалась:`, error);
+      
+      if (retryCount < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
         setIsLoading(false);
+        return startInterview(retryCount + 1);
+      }
+      
+      alert(`Не удалось начать интервью после ${MAX_RETRIES + 1} попыток.\n\n${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
-  
+
   const sendMessage = async () => {
     if (!input.trim() || !sessionId || isFinished || !userToken) return;
     const userMessage = input.trim();
