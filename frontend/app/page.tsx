@@ -876,7 +876,60 @@ export default function InterviewPage() {
             </div>
           </div>
 
-          <button onClick={startInterview} disabled={isLoading || !selectedCompany} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">
+          {(resumeText || vacancyText || selectedCompany) && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <div className="text-sm font-semibold text-blue-800 mb-2">
+                🎯 Режим собеседования:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedCompany && (
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                    🏢 {COMPANIES.find(c => c.id === selectedCompany)?.name || "Компания"}
+                    
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-400 rounded-full text-xs font-medium">
+                    🏢 Компания не выбрана
+                  </span>  
+                )}
+                
+                {vacancyText && (
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                    📋 Вакансия загружена
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-400 rounded-full text-xs font-medium">
+                    📋 Вакансия не загружена
+                  </span>
+                )}
+                
+                {resumeText && (
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                    📄 Резюме загружено
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                    ⚠️ Резюме не загружено
+                  </span>
+                )}
+              </div>
+              
+              {/* Описание текущего режима */}
+              <div className="mt-2 text-xs text-gray-600 italic">
+                {selectedCompany && vacancyText.trim() && resumeText.trim() && "✨ Полный режим: собеседование в стиле компании с учётом вакансии и резюме"}
+                {selectedCompany && vacancyText.trim() && !resumeText.trim() && "🏢 Собеседование в стиле компании по требованиям вакансии"}
+                {selectedCompany && !vacancyText.trim() && resumeText.trim() && "🏢 Собеседование в стиле компании на основе вашего резюме"}
+                {!selectedCompany && vacancyText.trim() && resumeText.trim() && "📋 Собеседование по вакансии с учётом вашего резюме"}
+                {!selectedCompany && vacancyText.trim() && !resumeText.trim() && "📋 Собеседование по требованиям вакансии"}
+                {!selectedCompany && !vacancyText.trim() && resumeText.trim() && "📄 Собеседование на основе вашего резюме"}
+                {selectedCompany && !vacancyText.trim() && !resumeText.trim() && "🏢 Собеседование в стиле выбранной компании"}
+                {!selectedCompany && !vacancyText.trim() && !resumeText.trim() && "💬 Общее собеседование без привязки к данным"}
+              </div>
+            </div>
+          )}
+
+          
+          <button onClick={startInterview} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed">
             {isLoading ? "Загрузка..." : "Начать собеседование 🚀"}
           </button>
         </div>
