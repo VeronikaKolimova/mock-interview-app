@@ -509,7 +509,8 @@ async def submit_answer(data: AnswerSubmit, user_token: str = Query("")) -> Inte
     
     interviewer_name = "Анна" if session.interviewer == "hr" else "Дмитрий"
     interviewer_role = "HR-менеджер" if session.interviewer == "hr" else "технический лид"
-    system_content = f"Ты {interviewer_role} {interviewer_name}{f' из компании {ctx['company_name']}' if ctx['has_company'] else ''}."
+    company_mention = f" из компании {ctx['company_name']}" if ctx['has_company'] else ""
+    system_content = f"Ты {interviewer_role} {interviewer_name}{company_mention}."
     
     min_questions = 3
     is_last_question = (session.question_idx >= min_questions)
