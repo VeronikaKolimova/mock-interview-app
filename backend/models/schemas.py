@@ -6,6 +6,7 @@ class InterviewStart(BaseModel):
     """Запрос на запуск интервью"""
     interviewer: str  # "hr" или "techlead"
     vacancy_text: Optional[str] = None
+    resume_text: Optional[str] = None
     tts_enabled: bool = False
     company: Optional[str] = None  # ID компании из списка (google, yandex и т.д.) или None
 
@@ -28,7 +29,8 @@ class SessionData(BaseModel):
     session_id: str
     interviewer: str
     vacancy_text: Optional[str] = None
-    company: Optional[str] = None  # 👈 ID выбранной компании
+    resume_text: Optional[str] = None
+    company: Optional[str] = None  #  ID выбранной компании
     created_at: str
     question_idx: int = 1
     messages: List[Message] = []
