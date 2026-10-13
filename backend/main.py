@@ -17,13 +17,14 @@ import re
 from services.file_parser import extract_text_from_file
 from pydantic import BaseModel
 from typing import Optional
+from services.rag_service import get_rag_service
 
 # ==========================================
 # ИНИЦИАЛИЗАЦИЯ
 # ==========================================
 supabase = get_supabase_client()
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)  # ✅ ИСПРАВЛЕНО: было __name__
+logger = logging.getLogger(__name__) 
 app = FastAPI(title="Mock Interview API", version="1.0.0")
 
 
@@ -228,12 +229,19 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
     sessions[session_id] = session
 
     ctx = build_interview_context(data.vacancy_text, resume_text, data.company)
+    # RAG: получаем похожие вопросы из базы 
+    rag = get_rag_service()
+    rag_context = rag.build_context_for_interview(
+        vacancy_text=data.vacancy_text,
+        direction="ML",
+        company=data.company,
+        top_k=5
+    )
     logger.info(f"🎯 Режим: {ctx['interview_mode']} | Вакансия: {ctx['has_vacancy']} | Резюме: {ctx['has_resume']} | Компания: {ctx['has_company']}")
 
     interviewer_name = "Анна" if data.interviewer == "hr" else "Дмитрий"
     interviewer_role = "HR-менеджер" if data.interviewer == "hr" else "технический лид"
 
-    # ✅ ИСПРАВЛЕНО: ДВОЙНЫЕ кавычки снаружи
     if ctx['has_company']:
         system_role = f"Ты {interviewer_role} {interviewer_name} из компании {ctx['company_name']}. Отвечай на русском."
     else:
@@ -249,6 +257,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 
 {ctx['vacancy_block']}
 {ctx['resume_block']}
+{rag_context}
 
 ИНСТРУКЦИИ:
 {ctx['instructions']}"""
@@ -258,6 +267,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 Скажи, что изучила вакансию. Задай вопрос по ней.
 
 {ctx['vacancy_block']}
+{rag_context}
 
 ИНСТРУКЦИИ:
 {ctx['instructions']}"""
@@ -267,6 +277,7 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 Скажи, что ознакомилась с резюме. Задай вопрос по опыту.
 
 {ctx['resume_block']}
+{rag_context}
 
 ИНСТРУКЦИИ:
 {ctx['instructions']}"""
@@ -275,11 +286,15 @@ async def start_interview(data: InterviewStart, user_token: str = Query("")) -> 
 Поздоровайся и представься как {interviewer_role} {interviewer_name}{company_mention}.
 Задай первый открытый вопрос в стиле компании.
 
+{rag_context}
+
 ИНСТРУКЦИИ:
 {ctx['instructions']}"""
     else:
         greeting_prompt = f"""Поздоровайся и представься как {interviewer_role} {interviewer_name}.
 Задай первый открытый вопрос о кандидате.
+
+{rag_context}
 
 ИНСТРУКЦИИ:
 {ctx['instructions']}"""

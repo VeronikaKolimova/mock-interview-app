@@ -1,121 +1,102 @@
-import numpy as np
+import os
 from typing import List, Dict, Optional
-import re
+from supabase import create_client, Client
+from dotenv import load_dotenv
+import logging
 
-# Простая база знаний для примера (в реальности будет загружаться из CSV/DB)
-VACANCY_KNOWLEDGE_BASE = {
-    "Data Scientist": [
-        {
-            "topic": "Python & Libraries",
-            "requirements": "Pandas, NumPy, Scikit-learn",
-            "sample_questions": [
-                "Как работает GroupBy в Pandas?",
-                "В чем разница между loc и iloc?",
-                "Как оптимизировать работу с большим DataFrame?"
-            ]
-        },
-        {
-            "topic": "Machine Learning",
-            "requirements": "Regression, Classification, Clustering",
-            "sample_questions": [
-                "Объясните разницу между L1 и L2 регуляризацией.",
-                "Что такое переобучение и как с ним бороться?",
-                "Как работает Random Forest?"
-            ]
-        }
-    ],
-    "ML Engineer": [
-        {
-            "topic": "Deployment",
-            "requirements": "Docker, Kubernetes, FastAPI",
-            "sample_questions": [
-                "Как упаковать модель в Docker?",
-                "Что такое CI/CD для ML?",
-                "Как масштабировать сервис предсказаний?"
-            ]
-        },
-        {
-            "topic": "MLOps",
-            "requirements": "MLflow, DVC, Monitoring",
-            "sample_questions": [
-                "Как отслеживать версии моделей?",
-                "Что такое дрифт данных?",
-                "Как настроить мониторинг качества предсказаний?"
-            ]
-        }
-    ],
-    "Data Analyst": [
-        {
-            "topic": "SQL",
-            "requirements": "Joins, Aggregations, Window Functions",
-            "sample_questions": [
-                "В чем разница между INNER JOIN и LEFT JOIN?",
-                "Как использовать оконные функции?",
-                "Как оптимизировать медленный запрос?"
-            ]
-        },
-        {
-            "topic": "Visualization",
-            "requirements": "Tableau, PowerBI, Matplotlib",
-            "sample_questions": [
-                "Какой график лучше выбрать для временных рядов?",
-                "Как показать распределение данных?",
-                "Что такое dashboard best practices?"
-            ]
-        }
-    ]
-}
+logger = logging.getLogger(__name__)
+load_dotenv()
+
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 class RAGService:
     def __init__(self):
-        self.knowledge_base = VACANCY_KNOWLEDGE_BASE
-        # В будущем здесь будет загрузка векторной базы данных
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_ANON_KEY")
+        self.supabase: Client = create_client(url, key)
+        self._model = None
 
-    def search_context(self, query: str, role: Optional[str] = None, top_k: int = 3) -> List[Dict]:
-        """
-        Ищет наиболее релевантный контекст по запросу.
-        Пока реализовано через простой поиск по ключевым словам.
-        В будущем заменим на векторный поиск (FAISS/Chroma).
-        """
-        results = []
-        query_lower = query.lower()
+    def _get_model(self):
+        """Ленивая загрузка модели."""
+        if self._model is None:
+            try:
+                from fastembed import TextEmbedding
+                self._model = TextEmbedding(model_name=EMBEDDING_MODEL)
+                logger.info(f"✅ Модель {EMBEDDING_MODEL} загружена")
+            except Exception as e:
+                raise RuntimeError(f"Не удалось загрузить модель {EMBEDDING_MODEL}: {e}")
+        return self._model
 
-        # Если роль указана, ищем только в ней, иначе во всех
-        roles_to_search = [role] if role else list(self.knowledge_base.keys())
+    def _embed_query(self, text: str) -> List[float]:
+        """Считает эмбеддинг для текста запроса."""
+        model = self._get_model()
+        embeddings = list(model.embed([text]))
+        return embeddings[0].tolist()
 
-        for r in roles_to_search:
-            if r not in self.knowledge_base:
-                continue
+    def search_similar_questions(
+        self,
+        query: str,
+        direction: Optional[str] = None,
+        company: Optional[str] = None,
+        top_k: int = 5
+    ) -> List[Dict]:
+        """Векторный поиск похожих вопросов через Supabase RPC."""
+        try:
+            query_embedding = self._embed_query(query)
 
-            for topic_data in self.knowledge_base[r]:
-                # Проверяем вхождение слов запроса в тему или требования
-                score = 0
-                if any(word in topic_data["topic"].lower() for word in query_lower.split()):
-                    score += 2
-                if any(word in topic_data["requirements"].lower() for word in query_lower.split()):
-                    score += 1
+            # Правильные параметры функции match_questions
+            result = self.supabase.rpc(
+                "match_questions",
+                {
+                    "query_embedding": query_embedding,
+                    "match_count": top_k,
+                    "filter_direction": direction,
+                    "filter_company": company
+                }
+            ).execute()
 
-                # Проверяем вопросы
-                for q in topic_data["sample_questions"]:
-                    if any(word in q.lower() for word in query_lower.split()):
-                        score += 3
+            return result.data if result.data else []
 
-                if score > 0:
-                    results.append({
-                        "role": r,
-                        "topic": topic_data["topic"],
-                        "requirements": topic_data["requirements"],
-                        "relevance_score": score,
-                        "suggested_question": topic_data["sample_questions"][0]
-                    })
+        except Exception as e:
+            logger.error(f"Ошибка при поиске вопросов: {e}")
+            return []
 
-        # Сортировка по релевантности
-        results.sort(key=lambda x: x["relevance_score"], reverse=True)
-        return results[:top_k]
+    def build_context_for_interview(
+        self,
+        vacancy_text: Optional[str] = None,
+        direction: str = "ML",
+        company: Optional[str] = None,
+        top_k: int = 5
+    ) -> str:
+        """Возвращает готовый контекст для LLM с похожими вопросами."""
+        query = vacancy_text or f"{direction} Engineer interview questions"
+        similar = self.search_similar_questions(
+            query=query,
+            direction=direction,
+            company=company,
+            top_k=top_k
+        )
+
+        if not similar:
+            logger.warning("RAG не нашёл похожих вопросов")
+            return ""
+
+        lines = [
+            "",
+            "=== Контекст: релевантные вопросы (используй как ориентир, не копируй дословно) ==="
+        ]
+        for i, q in enumerate(similar, 1):
+            hint = q.get("answer_hints") or ""
+            hint_str = f" [ключевые моменты: {hint[:150]}...]" if hint else ""
+            lines.append(f"{i}. {q.get('question', '')}{hint_str}")
+        lines.append("=" * 70)
+
+        context = "\n".join(lines)
+        logger.info(f"🎯 RAG: найдено {len(similar)} вопросов для направления {direction}")
+        return context
 
 
-# Глобальный экземпляр
 _rag_instance = None
 
 
