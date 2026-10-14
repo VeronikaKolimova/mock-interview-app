@@ -1,4 +1,5 @@
 import os
+import httpx
 from typing import List, Dict, Optional
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -7,7 +8,9 @@ import logging
 logger = logging.getLogger(__name__)
 load_dotenv()
 
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# Используем бесплатный Hugging Face Inference API вместо локальной модели.
+# Это спасает Render от нехватки памяти (OOM)! Модель та же самая.
+HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 class RAGService:
@@ -15,24 +18,35 @@ class RAGService:
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_ANON_KEY")
         self.supabase: Client = create_client(url, key)
-        self._model = None
-
-    def _get_model(self):
-        """Ленивая загрузка модели."""
-        if self._model is None:
-            try:
-                from fastembed import TextEmbedding
-                self._model = TextEmbedding(model_name=EMBEDDING_MODEL)
-                logger.info(f"✅ Модель {EMBEDDING_MODEL} загружена")
-            except Exception as e:
-                raise RuntimeError(f"Не удалось загрузить модель {EMBEDDING_MODEL}: {e}")
-        return self._model
 
     def _embed_query(self, text: str) -> List[float]:
-        """Считает эмбеддинг для текста запроса."""
-        model = self._get_model()
-        embeddings = list(model.embed([text]))
-        return embeddings[0].tolist()
+        """Считает эмбеддинг через внешний API, не нагружая память сервера."""
+        try:
+            headers = {}
+            hf_token = os.getenv("HF_TOKEN")
+            if hf_token:
+                headers["Authorization"] = f"Bearer {hf_token}"
+            
+            response = httpx.post(
+                HF_API_URL,
+                headers=headers,
+                json={"inputs": text, "options": {"wait_for_model": True}},
+                timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            # HF API может вернуть [[...]] или [...]
+            if isinstance(result, list) and len(result) > 0:
+                if isinstance(result[0], list):
+                    return result[0]
+                return result
+            raise ValueError("Неожиданный формат ответа от HF API")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении эмбеддинга от HF: {e}")
+            # Фоллбэк: возвращаем нулевой вектор размерности 384, чтобы не крашить всё приложение
+            return [0.0] * 384
 
     def search_similar_questions(
         self,
@@ -45,7 +59,6 @@ class RAGService:
         try:
             query_embedding = self._embed_query(query)
 
-            # Правильные параметры функции match_questions
             result = self.supabase.rpc(
                 "match_questions",
                 {
